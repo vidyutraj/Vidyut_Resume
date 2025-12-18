@@ -1,0 +1,50 @@
+name: Build and Deploy Resume
+
+on:
+  push:
+    branches:
+      - main  # Change to 'master' if your default branch is 'master'
+    paths:
+      - '*.tex'      # Triggers when LaTeX files change
+      - '*.cls'      # Triggers when class files change
+      - '*.sty'      # Triggers when style files change
+  workflow_dispatch:  # Allows manual triggering from GitHub UI
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout resume repository
+        uses: actions/checkout@v4
+      
+      - name: Compile LaTeX to PDF
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: resumecyber.tex  # ⚠️ CHANGE THIS to your actual LaTeX file name!
+          latexmk_use_xelatex: false  # Set to 'true' if you use XeLaTeX
+          args: -pdf -file-line-error -halt-on-error -interaction=nonstopmode
+      
+      - name: Setup Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Clone portfolio repository
+        env:
+          TOKEN: ${{ secrets.PORTFOLIO_TOKEN }}
+        run: |
+          git clone https://$TOKEN@github.com/vidyutraj/Vidyut-Portfolio.git portfolio-repo
+      
+      - name: Copy PDF to portfolio
+        run: |
+          mkdir -p portfolio-repo/public/resume
+          cp resumecyber.pdf portfolio-repo/public/resume/latest.pdf
+          # If your PDF has a different name, change 'resumecyber.pdf' above
+      
+      - name: Commit and push to portfolio
+        run: |
+          cd portfolio-repo
+          git add public/resume/latest.pdf
+          git commit -m "chore: update resume PDF [skip ci]" || exit 0
+          git push || exit 0
