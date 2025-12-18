@@ -18,12 +18,37 @@ jobs:
       - name: Checkout resume repository
         uses: actions/checkout@v4
       
+      - name: List repository files
+        run: |
+          echo "Files in repository:"
+          ls -la
+          echo ""
+          echo "Checking for required LaTeX files:"
+          [ -f resumecyber.tex ] && echo "✓ resumecyber.tex found" || echo "✗ resumecyber.tex NOT found"
+          [ -f glyphtounicode.tex ] && echo "✓ glyphtounicode.tex found" || echo "✗ glyphtounicode.tex NOT found (might be in package)"
+      
       - name: Compile LaTeX to PDF
         uses: xu-cheng/latex-action@v3
         with:
           root_file: resumecyber.tex  # ⚠️ CHANGE THIS to your actual LaTeX file name!
           latexmk_use_xelatex: false  # Set to 'true' if you use XeLaTeX
           args: -pdf -file-line-error -halt-on-error -interaction=nonstopmode
+        continue-on-error: false
+      
+      - name: Check if PDF was generated
+        run: |
+          if [ ! -f resumecyber.pdf ]; then
+            echo "ERROR: PDF file was not generated!"
+            echo ""
+            echo "Checking for log files..."
+            ls -la *.log 2>/dev/null || echo "No log files found"
+            echo ""
+            echo "Last 50 lines of log file (if exists):"
+            [ -f resumecyber.log ] && tail -50 resumecyber.log || echo "No log file found"
+            exit 1
+          fi
+          echo "PDF generated successfully: resumecyber.pdf"
+          ls -lh resumecyber.pdf
       
       - name: Setup Git
         run: |
@@ -34,7 +59,16 @@ jobs:
         env:
           TOKEN: ${{ secrets.PORTFOLIO_TOKEN }}
         run: |
-          git clone https://$TOKEN@github.com/vidyutraj/Vidyut-Portfolio.git portfolio-repo
+          if [ -z "$TOKEN" ]; then
+            echo "ERROR: PORTFOLIO_TOKEN secret is not set!"
+            exit 1
+          fi
+          echo "Cloning portfolio repository..."
+          git clone https://$TOKEN@github.com/vidyutraj/Vidyut-Portfolio.git portfolio-repo || {
+            echo "ERROR: Failed to clone portfolio repository. Check your token permissions and repository URL."
+            exit 1
+          }
+          echo "Successfully cloned portfolio repository"
       
       - name: Copy PDF to portfolio
         run: |
@@ -47,4 +81,7 @@ jobs:
           cd portfolio-repo
           git add public/resume/latest.pdf
           git commit -m "chore: update resume PDF [skip ci]" || exit 0
-          git push || exit 0
+          git push https://${{ secrets.PORTFOLIO_TOKEN }}@github.com/vidyutraj/Vidyut-Portfolio.git || {
+            echo "ERROR: Failed to push to portfolio repository. Check your token permissions."
+            exit 1
+          }
